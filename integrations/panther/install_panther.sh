@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # install_panther.sh — One-command installer for the Panther-Veza OAA integration
 #
-# Usage (interactive):
-#   bash install_panther.sh
+# Usage (interactive — must run with sudo):
+#   sudo bash install_panther.sh
 #
 # Usage (non-interactive / CI):
 #   VEZA_URL=https://myco.veza.com \
@@ -12,7 +12,7 @@
 #   PANTHER_CLIENT_ID=... \
 #   PANTHER_CLIENT_SECRET=... \
 #   PANTHER_SCOPE=panther:api \
-#   bash install_panther.sh --non-interactive
+#   sudo bash install_panther.sh --non-interactive
 #
 # Flags:
 #   --non-interactive   Skip all prompts; read values from environment variables
@@ -72,6 +72,21 @@ done
 
 SCRIPTS_DIR="${DEFAULT_INSTALL_DIR}/scripts"
 LOGS_DIR="${DEFAULT_INSTALL_DIR}/logs"
+
+# ---------------------------------------------------------------------------
+# Sudo / privilege check
+# ---------------------------------------------------------------------------
+if [[ "${EUID}" -ne 0 ]]; then
+    die "This installer must be run with sudo:\n       sudo bash install_panther.sh"
+fi
+
+# Capture the real invoking user so ownership can be restored after root operations
+REAL_USER="${SUDO_USER:-}"
+if [[ -z "${REAL_USER}" ]]; then
+    warn "SUDO_USER is not set — all created files will be owned by root"
+else
+    info "Running as root on behalf of: ${REAL_USER}"
+fi
 
 # ---------------------------------------------------------------------------
 # OS detection
@@ -178,6 +193,13 @@ step 2 "Creating directory layout"
 mkdir -p "${SCRIPTS_DIR}" "${LOGS_DIR}" \
     || die "Could not create directories under ${DEFAULT_INSTALL_DIR}"
 
+# Restore ownership so the invoking user can read/write without sudo
+if [[ -n "${REAL_USER}" ]]; then
+    chown -R "${REAL_USER}:" "${DEFAULT_INSTALL_DIR}"
+    chmod -R u+rwX "${DEFAULT_INSTALL_DIR}"
+    success "Ownership of ${DEFAULT_INSTALL_DIR} transferred to ${REAL_USER}"
+fi
+
 success "Directories created"
 info "  Scripts : ${SCRIPTS_DIR}"
 info "  Logs    : ${LOGS_DIR}"
@@ -230,6 +252,11 @@ info "Installing Python dependencies from requirements.txt ..."
 "${VENV_DIR}/bin/pip" install --quiet -r "${SCRIPTS_DIR}/requirements.txt" \
     || die "Failed to install dependencies"
 success "Python dependencies installed"
+
+# pip may create root-owned files inside the venv — restore ownership
+if [[ -n "${REAL_USER}" ]]; then
+    chown -R "${REAL_USER}:" "${SCRIPTS_DIR}"
+fi
 
 # ---------------------------------------------------------------------------
 # Step 5 — Generate .env configuration file
@@ -311,13 +338,22 @@ VEZA_API_KEY=${val_veza_api_key}
 EOF
 
     chmod 600 "${ENV_FILE}"
-    success ".env file created at ${ENV_FILE} (permissions: 600)"
+    # Ensure the .env file is owned by the invoking user, not root
+    if [[ -n "${REAL_USER}" ]]; then
+        chown "${REAL_USER}:" "${ENV_FILE}"
+    fi
+    success ".env file created at ${ENV_FILE} (permissions: 600, owner: ${REAL_USER:-root})"
 fi
 
 # ---------------------------------------------------------------------------
 # Final summary
 # ---------------------------------------------------------------------------
 echo ""
+# Final ownership pass — catch anything created by intermediate steps
+if [[ -n "${REAL_USER}" ]]; then
+    chown -R "${REAL_USER}:" "${DEFAULT_INSTALL_DIR}"
+fi
+
 echo -e "${BOLD}${GREEN}━━━ Installation Complete ━━━${NC}"
 echo ""
 echo "  Install directory : ${DEFAULT_INSTALL_DIR}"
@@ -340,6 +376,10 @@ echo "  3. Once validated, run a live push:"
 echo "       python3 panther.py --env-file .env"
 echo ""
 echo "  4. Schedule with cron (example — daily at 02:00 AM):"
-echo "       sudo crontab -e"
+echo "       crontab -e"
 echo "       0 2 * * * ${SCRIPTS_DIR}/venv/bin/python3 ${SCRIPTS_DIR}/panther.py >> ${LOGS_DIR}/cron.log 2>&1"
+echo ""
+if [[ -n "${REAL_USER}" ]]; then
+    echo "  All files are owned by: ${REAL_USER}"
+fi
 echo ""
