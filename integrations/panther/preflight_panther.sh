@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# preflight_panther.sh — Pre-deployment validation for the Panther-Veza OAA connector
+# preflight_panther.sh — Pre-deployment validation for the Panther3250-Veza OAA connector
 #
 # Usage:
 #   bash preflight_panther.sh          # interactive menu
@@ -437,7 +437,7 @@ check_deployment_structure() {
     fi
 
     # Recommended install path
-    RECOMMENDED="/opt/VEZA/panther-veza/scripts"
+    RECOMMENDED="/opt/VEZA/panther3250-veza/scripts"
     if [[ "${SCRIPT_DIR}" == "${RECOMMENDED}" ]]; then
         print_success "Running from recommended path: ${RECOMMENDED}"
     else
@@ -446,7 +446,7 @@ check_deployment_structure() {
 
     # Current user
     CURRENT_USER=$(whoami 2>/dev/null || id -un)
-    EXPECTED_USER="panther-veza"
+    EXPECTED_USER="panther3250-veza"
     if [[ "${CURRENT_USER}" == "${EXPECTED_USER}" ]]; then
         print_success "Running as service account: ${CURRENT_USER}"
     else
@@ -545,7 +545,7 @@ RUN_ALL=false
 [[ "${1:-}" == "--all" ]] && RUN_ALL=true
 
 {
-    echo "Panther-Veza OAA Preflight Validation"
+    echo "Panther3250-Veza OAA Preflight Validation"
     echo "Started: $(date)"
     echo "Script dir: ${SCRIPT_DIR}"
 } >> "${LOG_FILE}"
@@ -567,7 +567,7 @@ fi
 # Interactive menu
 while true; do
     echo ""
-    echo -e "${BOLD}Panther-Veza OAA Preflight Validation${NC}"
+    echo -e "${BOLD}Panther3250-Veza OAA Preflight Validation${NC}"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo "  1) System Requirements"
     echo "  2) Python Dependencies"

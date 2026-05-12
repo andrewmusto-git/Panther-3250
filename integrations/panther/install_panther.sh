@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# install_panther.sh — One-command installer for the Panther-Veza OAA integration
+# install_panther.sh — One-command installer for the Panther3250-Veza OAA integration
 #
 # Usage (interactive — must run with sudo):
 #   sudo bash install_panther.sh

@@ -131,8 +131,8 @@ bash <(curl -fsSL https://raw.githubusercontent.com/andrewmusto-git/Panther-3250
 sudo dnf install -y git python3 python3-pip
 python3 -m venv --help &>/dev/null || sudo dnf install -y python3-virtualenv
 
-mkdir -p /opt/VEZA/panther-veza/{scripts,logs}
-cd /opt/VEZA/panther-veza/scripts
+mkdir -p /opt/VEZA/panther3250-veza/{scripts,logs}
+cd /opt/VEZA/panther3250-veza/scripts
 
 git clone --depth 1 https://github.com/andrewmusto-git/Panther-3250 /tmp/panther-repo
 cp /tmp/panther-repo/integrations/panther/panther.py .
@@ -150,8 +150,8 @@ chmod 600 .env
 ```bash
 sudo apt-get update && sudo apt-get install -y git python3 python3-pip python3-venv
 
-mkdir -p /opt/VEZA/panther-veza/{scripts,logs}
-cd /opt/VEZA/panther-veza/scripts
+mkdir -p /opt/VEZA/panther3250-veza/{scripts,logs}
+cd /opt/VEZA/panther3250-veza/scripts
 
 git clone --depth 1 https://github.com/andrewmusto-git/Panther-3250 /tmp/panther-repo
 cp /tmp/panther-repo/integrations/panther/panther.py .
@@ -247,10 +247,10 @@ python3 panther.py \
 ### Service account
 
 ```bash
-sudo useradd -r -s /bin/bash -m -d /opt/VEZA/panther-veza panther-veza
-sudo chown -R panther-veza:panther-veza /opt/VEZA/panther-veza
-sudo chmod 700 /opt/VEZA/panther-veza/scripts
-sudo chmod 600 /opt/VEZA/panther-veza/scripts/.env
+sudo useradd -r -s /bin/bash -m -d /opt/VEZA/panther3250-veza panther3250-veza
+sudo chown -R panther3250-veza:panther3250-veza /opt/VEZA/panther3250-veza
+sudo chmod 700 /opt/VEZA/panther3250-veza/scripts
+sudo chmod 600 /opt/VEZA/panther3250-veza/scripts/.env
 ```
 
 ### SELinux (RHEL)
@@ -258,44 +258,44 @@ sudo chmod 600 /opt/VEZA/panther-veza/scripts/.env
 ```bash
 getenforce
 # If Enforcing, restore context after copying files:
-sudo restorecon -Rv /opt/VEZA/panther-veza
+sudo restorecon -Rv /opt/VEZA/panther3250-veza
 ```
 
 ### Cron scheduling
 
-Create a wrapper script at `/opt/VEZA/panther-veza/scripts/run_panther.sh`:
+Create a wrapper script at `/opt/VEZA/panther3250-veza/scripts/run_panther.sh`:
 
 ```bash
 #!/usr/bin/env bash
 set -euo pipefail
-cd /opt/VEZA/panther-veza/scripts
+cd /opt/VEZA/panther3250-veza/scripts
 source venv/bin/activate
-python3 panther.py --env-file .env >> /opt/VEZA/panther-veza/logs/cron.log 2>&1
+python3 panther.py --env-file .env >> /opt/VEZA/panther3250-veza/logs/cron.log 2>&1
 ```
 
 ```bash
-chmod +x /opt/VEZA/panther-veza/scripts/run_panther.sh
+chmod +x /opt/VEZA/panther3250-veza/scripts/run_panther.sh
 ```
 
-Add to `/etc/cron.d/panther-veza`:
+Add to `/etc/cron.d/panther3250-veza`:
 
 ```cron
 # Panther → Veza OAA sync — daily at 02:00 AM
-0 2 * * * panther-veza /opt/VEZA/panther-veza/scripts/run_panther.sh
+0 2 * * * panther3250-veza /opt/VEZA/panther3250-veza/scripts/run_panther.sh
 ```
 
 ### Log rotation
 
-Create `/etc/logrotate.d/panther-veza`:
+Create `/etc/logrotate.d/panther3250-veza`:
 
 ```
-/opt/VEZA/panther-veza/logs/*.log {
+/opt/VEZA/panther3250-veza/logs/*.log {
     daily
     rotate 30
     compress
     missingok
     notifempty
-    su panther-veza panther-veza
+    su panther3250-veza panther3250-veza
 }
 ```
 
@@ -321,7 +321,7 @@ Stagger cron jobs by at least 5 minutes to avoid rate-limit collisions.
 - Run the connector as a dedicated least-privilege service account.
 - Rotate `PANTHER_CLIENT_SECRET` and `VEZA_API_KEY` on a schedule (90-day minimum).
 - Restrict `PANTHER_CLIENT_ID` to read-only Panther scopes (`Read User Info`).
-- On RHEL, verify SELinux context with `ls -Z /opt/VEZA/panther-veza/scripts/.env`.
+- On RHEL, verify SELinux context with `ls -Z /opt/VEZA/panther3250-veza/scripts/.env`.
 
 ---
 
@@ -346,7 +346,7 @@ Stagger cron jobs by at least 5 minutes to avoid rate-limit collisions.
 ### Missing Python modules
 
 ```bash
-cd /opt/VEZA/panther-veza/scripts
+cd /opt/VEZA/panther3250-veza/scripts
 venv/bin/pip install -r requirements.txt
 ```
 
