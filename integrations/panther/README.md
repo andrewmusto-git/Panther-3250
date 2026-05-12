@@ -105,7 +105,7 @@ graph LR
 ## 5. Quick Start (one-command install)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/SmurfitWestrock/Panther-3250/main/integrations/panther/install_panther.sh | bash
+curl -fsSL https://raw.githubusercontent.com/andrewmusto-git/Panther-3250/main/integrations/panther/install_panther.sh | bash
 ```
 
 For non-interactive / CI installs, set environment variables before piping:
@@ -118,7 +118,7 @@ PANTHER_TOKEN_URL=https://myco.auth.us-east-1.amazoncognito.com/oauth2/token \
 PANTHER_CLIENT_ID=<id> \
 PANTHER_CLIENT_SECRET=<secret> \
 PANTHER_SCOPE=panther:api \
-bash <(curl -fsSL https://raw.githubusercontent.com/SmurfitWestrock/Panther-3250/main/integrations/panther/install_panther.sh) --non-interactive
+bash <(curl -fsSL https://raw.githubusercontent.com/andrewmusto-git/Panther-3250/main/integrations/panther/install_panther.sh) --non-interactive
 ```
 
 ---
@@ -134,7 +134,7 @@ python3 -m venv --help &>/dev/null || sudo dnf install -y python3-virtualenv
 mkdir -p /opt/VEZA/panther-veza/{scripts,logs}
 cd /opt/VEZA/panther-veza/scripts
 
-git clone --depth 1 https://github.com/SmurfitWestrock/Panther-3250 /tmp/panther-repo
+git clone --depth 1 https://github.com/andrewmusto-git/Panther-3250 /tmp/panther-repo
 cp /tmp/panther-repo/integrations/panther/panther.py .
 cp /tmp/panther-repo/integrations/panther/requirements.txt .
 rm -rf /tmp/panther-repo
@@ -153,7 +153,7 @@ sudo apt-get update && sudo apt-get install -y git python3 python3-pip python3-v
 mkdir -p /opt/VEZA/panther-veza/{scripts,logs}
 cd /opt/VEZA/panther-veza/scripts
 
-git clone --depth 1 https://github.com/SmurfitWestrock/Panther-3250 /tmp/panther-repo
+git clone --depth 1 https://github.com/andrewmusto-git/Panther-3250 /tmp/panther-repo
 cp /tmp/panther-repo/integrations/panther/panther.py .
 cp /tmp/panther-repo/integrations/panther/requirements.txt .
 rm -rf /tmp/panther-repo

@@ -26,7 +26,7 @@ set -uo pipefail
 # ---------------------------------------------------------------------------
 # Defaults
 # ---------------------------------------------------------------------------
-REPO_URL="${REPO_URL:-https://github.com/SmurfitWestrock/Panther-3250}"
+REPO_URL="${REPO_URL:-https://github.com/andrewmusto-git/Panther-3250}"
 BRANCH="${BRANCH:-main}"
 INTEGRATION_SUBDIR="integrations/panther3250"
 DEFAULT_INSTALL_DIR="/opt/VEZA/panther-veza"
