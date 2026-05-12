@@ -77,7 +77,7 @@ def _setup_logging(log_level: str = "INFO") -> None:
 
 MILESTONES: List[str] = [
     "OAuth2 token acquisition",
-    "Fetching roles from Panther",
+    "Fetching groups from Panther",
     "Fetching users from Panther",
     "Building OAA payload",
     "Pushing to Veza",
@@ -310,14 +310,18 @@ class PantherClient:
         endpoint: str,
         extra_params: Optional[Dict[str, Any]] = None,
     ) -> List[Dict[str, Any]]:
-        """Paginate through a Panther list endpoint using cursor-based pagination."""
+        """Fetch all records from a Panther list endpoint.
+
+        Handles both flat JSON array responses (e.g. /v1/groups) and
+        dict responses with a 'results' key and optional cursor pagination.
+        """
         url = f"{self.base_url}/{endpoint.lstrip('/')}"
         results: List[Dict[str, Any]] = []
         cursor: Optional[str] = None
         page = 0
 
         while True:
-            params: Dict[str, Any] = {"limit": 60}
+            params: Dict[str, Any] = {}
             if extra_params:
                 params.update(extra_params)
             if cursor:
@@ -340,6 +344,14 @@ class PantherClient:
                 sys.exit(1)
 
             data = resp.json()
+
+            # Flat array response (e.g. /v1/groups returns [...])
+            if isinstance(data, list):
+                results.extend(data)
+                log.debug("%s: flat array response — %d items", endpoint, len(data))
+                break
+
+            # Wrapped response with 'results' key + optional cursor pagination
             page_results = data.get("results", [])
             results.extend(page_results)
             page += 1
@@ -355,16 +367,16 @@ class PantherClient:
             if not cursor:
                 break
 
-        log.info("Completed pagination for %s: %d total records", endpoint, len(results))
+        log.info("Completed fetch for %s: %d total records", endpoint, len(results))
         return results
 
     def list_roles(self) -> List[Dict[str, Any]]:
-        """Return all Panther roles via GET /v1/roles."""
-        return self._get_all_pages("roles")
+        """Return all Panther groups (entitlements) via GET /v1/groups."""
+        return self._get_all_pages("v1/groups")
 
     def list_users(self) -> List[Dict[str, Any]]:
-        """Return all Panther users (active + deactivated) via GET /v1/users."""
-        return self._get_all_pages("users", extra_params={"include-deactivated": "true"})
+        """Return all Panther users via GET /v1/users."""
+        return self._get_all_pages("v1/users")
 
 
 # ---------------------------------------------------------------------------
@@ -415,14 +427,14 @@ def build_oaa_payload(
     args: argparse.Namespace,
     cfg: Dict[str, Any],
 ) -> CustomApplication:
-    """Assemble the OAA CustomApplication object from Panther users and roles.
+    """Assemble the OAA CustomApplication object from Panther users and groups.
 
     Entity model:
       CustomApplication
-        ├─ Local Roles  (one per Panther role)
-        │    └─ Custom Permissions  (one per unique Panther permission string)
-        └─ Local Users  (one per Panther user)
-             └─ Role membership  (derived from user.role.id / user.role.name)
+        ├─ Local Roles  (one per Panther group, from GET /v1/groups)
+        │    └─ Custom Permission: "Member" (DataRead)
+        └─ Local Users  (one per Panther user, from GET /v1/users)
+             └─ Role membership  (derived from user.groups[*].groupName)
     """
     # Derive a human-readable datasource name from the base URL when not supplied
     datasource_name = args.datasource_name
@@ -439,108 +451,75 @@ def build_oaa_payload(
     app = CustomApplication(
         name=datasource_name,
         application_type=args.provider_name,
-        description="Panther SIEM — users and roles collected via OAA REST connector",
+        description="Panther SIEM — users and groups collected via OAA REST connector",
     )
 
     # ------------------------------------------------------------------
-    # Step 1: Collect every unique Panther permission string across roles
+    # Step 1: Register a single "Member" permission.
+    #         Groups in this API carry no sub-permissions; membership is
+    #         the entitlement itself.
     # ------------------------------------------------------------------
-    all_perm_names: set = set()
-    for role in roles:
-        for p in role.get("permissions", []):
-            if isinstance(p, str) and p:
-                all_perm_names.add(p)
-
-    # Register each unique permission as a custom OAA permission
-    for perm_name in sorted(all_perm_names):
-        oaa_perms = _classify_permission(perm_name)
-        app.add_custom_permission(perm_name, oaa_perms)
-        log.debug("Registered permission: %s → %s", perm_name, [p.name for p in oaa_perms])
-
-    log.info("Registered %d unique Panther permission strings", len(all_perm_names))
+    app.add_custom_permission("Member", [OAAPermission.DataRead])
+    log.debug("Registered custom permission: Member → DataRead")
 
     # ------------------------------------------------------------------
-    # Step 2: Add roles and assign their permissions
+    # Step 2: Add groups as local roles
     # ------------------------------------------------------------------
-    # Index by both ID and name so user lookups work regardless of reference type
-    role_id_to_name: Dict[str, str] = {}
-    role_name_set: set = set()
+    group_name_set: set = set()
 
-    for role in roles:
-        role_id = role.get("id", "")
-        role_name = role.get("name", role_id)
-        perms = role.get("permissions", [])
+    for group in roles:
+        group_name = group.get("groupName", "")
+        if not group_name:
+            log.warning("Skipping group with missing groupName: %s", group)
+            continue
 
-        local_role = app.add_local_role(role_name, unique_id=role_id or role_name)
+        local_role = app.add_local_role(group_name, unique_id=group_name)
+        local_role.add_permission("Member", apply_to_application=True)
+        group_name_set.add(group_name)
+        log.debug("Added group as role: %s", group_name)
 
-        for perm_name in perms:
-            if isinstance(perm_name, str) and perm_name:
-                local_role.add_permission(perm_name, apply_to_application=True)
-
-        if role_id:
-            role_id_to_name[role_id] = role_name
-        role_name_set.add(role_name)
-
-        log.debug(
-            "Added role: %s (id=%s, permissions=%d)",
-            role_name,
-            role_id,
-            len(perms),
-        )
-
-    log.info("Added %d roles to OAA payload", len(roles))
+    log.info("Added %d groups to OAA payload", len(group_name_set))
 
     # ------------------------------------------------------------------
-    # Step 3: Add users and assign role memberships
+    # Step 3: Add users and assign group memberships
     # ------------------------------------------------------------------
-    unmatched_roles: set = set()
+    unmatched_groups: set = set()
 
     for user in users:
-        user_id = user.get("id", user.get("email", ""))
+        user_name = user.get("userName", user.get("email", ""))
         email = user.get("email", "")
-        given = user.get("givenName", "")
-        family = user.get("familyName", "")
-        full_name = f"{given} {family}".strip() or email
-        is_active = bool(user.get("enabled", True))
+        full_name = user.get("fullName", "").strip() or email
+        is_active = bool(user.get("isActive", True))
 
-        local_user = app.add_local_user(email, unique_id=user_id, name=full_name)
+        local_user = app.add_local_user(full_name, unique_id=user_name, name=full_name)
         local_user.is_active = is_active
 
-        # Resolve role reference from the user's `role` sub-object
-        user_role_ref = user.get("role") or {}
-        role_ref_id = user_role_ref.get("id", "")
-        role_ref_name = user_role_ref.get("name", "")
+        for g in user.get("groups", []):
+            gname = g.get("groupName", "")
+            if not gname:
+                continue
+            if gname in group_name_set:
+                local_user.add_role(gname)
+                log.debug("User %s → group %s", user_name, gname)
+            else:
+                unmatched_groups.add(gname)
+                log.warning(
+                    "User %s references unknown group '%s' — membership skipped",
+                    user_name,
+                    gname,
+                )
 
-        # Prefer lookup by ID; fall back to name
-        resolved_role_name: Optional[str] = None
-        if role_ref_id and role_ref_id in role_id_to_name:
-            resolved_role_name = role_id_to_name[role_ref_id]
-        elif role_ref_name and role_ref_name in role_name_set:
-            resolved_role_name = role_ref_name
-
-        if resolved_role_name:
-            local_user.add_role(resolved_role_name)
-            log.debug("User %s → role %s", email, resolved_role_name)
-        elif role_ref_id or role_ref_name:
-            ref = role_ref_id or role_ref_name
-            unmatched_roles.add(ref)
-            log.warning(
-                "User %s references unknown role '%s' — role membership skipped",
-                email,
-                ref,
-            )
-
-    if unmatched_roles:
+    if unmatched_groups:
         log.warning(
-            "The following role references were not resolved: %s",
-            ", ".join(sorted(unmatched_roles)),
+            "The following group references were not resolved: %s",
+            ", ".join(sorted(unmatched_groups)),
         )
 
     log.info(
         "Added %d users to OAA payload (active=%d, inactive=%d)",
         len(users),
-        sum(1 for u in users if u.get("enabled", True)),
-        sum(1 for u in users if not u.get("enabled", True)),
+        sum(1 for u in users if u.get("isActive", True)),
+        sum(1 for u in users if not u.get("isActive", True)),
     )
 
     return app
@@ -657,15 +636,15 @@ def main() -> None:
     milestone(2, MILESTONES[1])
     client = PantherClient(cfg["panther_base_url"], access_token, tenant=cfg["panther_tenant"])
     roles = client.list_roles()
-    print(f"  Roles fetched   : {len(roles)}")
-    log.info("Fetched %d role(s) from Panther", len(roles))
+    print(f"  Groups fetched  : {len(roles)}")
+    log.info("Fetched %d group(s) from Panther", len(roles))
 
     # -------------------------------------------------------------------
     # Milestone 3 — Fetch users
     # -------------------------------------------------------------------
     milestone(3, MILESTONES[2])
     users = client.list_users()
-    active_count = sum(1 for u in users if u.get("enabled", True))
+    active_count = sum(1 for u in users if u.get("isActive", True))
     inactive_count = len(users) - active_count
     print(f"  Users fetched   : {len(users)} total ({active_count} active, {inactive_count} inactive)")
     log.info("Fetched %d user(s) from Panther", len(users))
@@ -676,7 +655,7 @@ def main() -> None:
     milestone(4, MILESTONES[3])
     app = build_oaa_payload(users, roles, args, cfg)
     datasource_name = _derive_datasource_name(args, cfg)
-    print(f"  Payload built   : {len(users)} users, {len(roles)} roles")
+    print(f"  Payload built   : {len(users)} users, {len(roles)} groups")
 
     # -------------------------------------------------------------------
     # Milestone 5 — Push to Veza
@@ -695,14 +674,10 @@ def main() -> None:
     # -------------------------------------------------------------------
     # Final summary
     # -------------------------------------------------------------------
-    all_perm_names = {
-        p for role in roles for p in role.get("permissions", []) if isinstance(p, str)
-    }
     print("\n" + "=" * 60)
     print("  Run complete")
     print(f"  Users         : {len(users)}")
-    print(f"  Roles         : {len(roles)}")
-    print(f"  Permissions   : {len(all_perm_names)} unique")
+    print(f"  Groups        : {len(roles)}")
     print(f"  Provider      : {args.provider_name}")
     print(f"  Datasource    : {datasource_name}")
     print(f"  Mode          : {'DRY RUN' if args.dry_run else 'PUSHED TO VEZA'}")
@@ -711,10 +686,9 @@ def main() -> None:
     print("=" * 60 + "\n")
 
     log.info(
-        "Run complete — users=%d, roles=%d, permissions=%d, mode=%s",
+        "Run complete — users=%d, groups=%d, mode=%s",
         len(users),
         len(roles),
-        len(all_perm_names),
         "dry-run" if args.dry_run else "live",
     )
 
