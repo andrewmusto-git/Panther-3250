@@ -490,7 +490,7 @@ def build_oaa_payload(
         full_name = user.get("fullName", "").strip() or email
         is_active = bool(user.get("isActive", True))
 
-        local_user = app.add_local_user(full_name, unique_id=user_name, name=full_name)
+        local_user = app.add_local_user(full_name, unique_id=user_name)
         local_user.is_active = is_active
 
         for g in user.get("groups", []):
