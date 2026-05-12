@@ -165,6 +165,10 @@ def parse_args() -> argparse.Namespace:
         "--panther-scope", default=None,
         help="OAuth2 scope value (overrides PANTHER_SCOPE; leave empty if not required)",
     )
+    parser.add_argument(
+        "--panther-tenant", default=None,
+        help="Tenant ID sent in the 'tenant' request header (overrides PANTHER_TENANT; default: 3250)",
+    )
 
     # Behaviour flags
     parser.add_argument(
@@ -202,6 +206,7 @@ def load_config(args: argparse.Namespace) -> Dict[str, Any]:
         "panther_client_id":     args.panther_client_id     or os.getenv("PANTHER_CLIENT_ID"),
         "panther_client_secret": args.panther_client_secret or os.getenv("PANTHER_CLIENT_SECRET"),
         "panther_scope":         args.panther_scope         or os.getenv("PANTHER_SCOPE", ""),
+        "panther_tenant":        args.panther_tenant        or os.getenv("PANTHER_TENANT", "3250"),
     }
 
 
@@ -285,7 +290,7 @@ def get_access_token(cfg: Dict[str, Any]) -> str:
 class PantherClient:
     """Minimal Panther REST API client using a Bearer access token."""
 
-    def __init__(self, base_url: str, access_token: str) -> None:
+    def __init__(self, base_url: str, access_token: str, tenant: str = "3250") -> None:
         # Normalise: strip trailing slash, append /v1 when absent
         base = base_url.rstrip("/")
         if not base.endswith("/v1"):
@@ -296,11 +301,12 @@ class PantherClient:
         self.session.headers.update(
             {
                 "Authorization": f"Bearer {access_token}",
-                "Accept": "application/json",
+                "Accept": "text/plain",
                 "Content-Type": "application/json",
+                "tenant": tenant,
             }
         )
-        log.debug("PantherClient initialised with base_url=%s", self.base_url)
+        log.debug("PantherClient initialised with base_url=%s, tenant=%s", self.base_url, tenant)
 
     def _get_all_pages(
         self,
@@ -652,7 +658,7 @@ def main() -> None:
     # Milestone 2 — Fetch roles
     # -------------------------------------------------------------------
     milestone(2, MILESTONES[1])
-    client = PantherClient(cfg["panther_base_url"], access_token)
+    client = PantherClient(cfg["panther_base_url"], access_token, tenant=cfg["panther_tenant"])
     roles = client.list_roles()
     print(f"  Roles fetched   : {len(roles)}")
     log.info("Fetched %d role(s) from Panther", len(roles))
