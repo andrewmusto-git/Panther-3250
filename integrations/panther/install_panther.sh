@@ -28,8 +28,9 @@ set -uo pipefail
 # ---------------------------------------------------------------------------
 REPO_URL="${REPO_URL:-https://github.com/andrewmusto-git/Panther-3250}"
 BRANCH="${BRANCH:-main}"
-INTEGRATION_SUBDIR="integrations/panther"
-DEFAULT_INSTALL_DIR="/opt/VEZA/panther3250-veza"
+REPO_INTEGRATION_SUBDIR="integrations/panther"  # path within the cloned repo — do not change
+DEFAULT_INSTALL_DIR="/opt/VEZA/panther-veza"
+INSTANCE_ID=""
 SCRIPTS_DIR=""
 LOGS_DIR=""
 NON_INTERACTIVE=false
@@ -63,6 +64,7 @@ while [[ $# -gt 0 ]]; do
         --non-interactive) NON_INTERACTIVE=true ;;
         --overwrite-env)   OVERWRITE_ENV=true ;;
         --install-dir)     DEFAULT_INSTALL_DIR="$2"; shift ;;
+        --instance-id)     INSTANCE_ID="$2"; shift ;;
         --repo-url)        REPO_URL="$2"; shift ;;
         --branch)          BRANCH="$2"; shift ;;
         *) warn "Unknown flag: $1" ;;
@@ -70,8 +72,25 @@ while [[ $# -gt 0 ]]; do
     shift
 done
 
-SCRIPTS_DIR="${DEFAULT_INSTALL_DIR}/scripts"
-LOGS_DIR="${DEFAULT_INSTALL_DIR}/logs"
+# ---------------------------------------------------------------------------
+# Instance ID — prompt if not supplied via --instance-id
+# ---------------------------------------------------------------------------
+if [[ -z "${INSTANCE_ID}" ]]; then
+    if [[ "${NON_INTERACTIVE}" == "true" ]]; then
+        INSTANCE_ID="${PANTHER_INSTANCE_ID:-}"
+        [[ "${INSTANCE_ID}" =~ ^[0-9]{4}$ ]] || die "NON_INTERACTIVE mode requires a 4-digit PANTHER_INSTANCE_ID env var (e.g. PANTHER_INSTANCE_ID=3250)"
+    else
+        echo ""
+        while true; do
+            IFS= read -r -p "  Enter the 4-digit Panther instance ID (e.g. 3250): " INSTANCE_ID </dev/tty
+            [[ "${INSTANCE_ID}" =~ ^[0-9]{4}$ ]] && break
+            warn "Invalid — please enter exactly 4 digits."
+        done
+    fi
+fi
+
+SCRIPTS_DIR="${DEFAULT_INSTALL_DIR}/integrations/panther-${INSTANCE_ID}"
+LOGS_DIR="${DEFAULT_INSTALL_DIR}/integrations/panther-${INSTANCE_ID}/logs"
 
 # ---------------------------------------------------------------------------
 # Sudo / privilege check
@@ -219,7 +238,7 @@ GIT_TERMINAL_PROMPT=0 git clone \
     "${REPO_URL}" "${tmp_dir}" \
     || die "git clone failed — check that ${REPO_URL} is accessible."
 
-src="${tmp_dir}/${INTEGRATION_SUBDIR}"
+src="${tmp_dir}/${REPO_INTEGRATION_SUBDIR}"
 [[ -d "${src}" ]] || die "Integration sub-directory not found in cloned repo: ${src}"
 
 cp -f "${src}/panther.py"        "${SCRIPTS_DIR}/"
@@ -303,7 +322,7 @@ if [[ ! -f "${ENV_FILE}" ]] || [[ "${OVERWRITE_ENV}" == "true" ]]; then
 
     cat > "${ENV_FILE}" <<EOF
 # ============================================================
-# Panther → Veza OAA Integration — Environment Configuration
+# Panther-${INSTANCE_ID} → Veza OAA Integration — Environment Configuration
 # Generated: $(date -u +"%Y-%m-%dT%H:%M:%SZ")
 # Permissions: 600 (this file contains secrets — do not commit)
 # ============================================================
@@ -323,6 +342,9 @@ PANTHER_CLIENT_SECRET=${val_panther_client_secret}
 
 # OAuth2 scope (leave empty if your IdP does not require a scope)
 PANTHER_SCOPE=${val_panther_scope}
+
+# Tenant ID for the Panther instance
+PANTHER_TENANT=${INSTANCE_ID}
 
 # ------------------------------------------------------------
 # Veza Configuration
@@ -356,8 +378,9 @@ fi
 
 echo -e "${BOLD}${GREEN}━━━ Installation Complete ━━━${NC}"
 echo ""
+echo "  Instance ID       : ${INSTANCE_ID}"
 echo "  Install directory : ${DEFAULT_INSTALL_DIR}"
-echo "  Scripts           : ${SCRIPTS_DIR}"
+echo "  Instance subdir   : ${SCRIPTS_DIR}"
 echo "  Virtual env       : ${VENV_DIR}"
 echo "  Environment file  : ${ENV_FILE}"
 echo "  Log output        : ${LOGS_DIR}"
@@ -370,14 +393,14 @@ echo ""
 echo "  2. Run a dry-run to validate connectivity and payload:"
 echo "       cd ${SCRIPTS_DIR}"
 echo "       source venv/bin/activate"
-echo "       python3 panther.py --dry-run --save-json --log-level DEBUG"
+       python3 panther.py --instance-id ${INSTANCE_ID} --dry-run --save-json --log-level DEBUG
 echo ""
 echo "  3. Once validated, run a live push:"
-echo "       python3 panther.py --env-file .env"
+echo "       python3 panther.py --instance-id ${INSTANCE_ID} --env-file .env"
 echo ""
 echo "  4. Schedule with cron (example — daily at 02:00 AM):"
 echo "       crontab -e"
-echo "       0 2 * * * ${SCRIPTS_DIR}/venv/bin/python3 ${SCRIPTS_DIR}/panther.py >> ${LOGS_DIR}/cron.log 2>&1"
+echo "       0 2 * * * ${SCRIPTS_DIR}/venv/bin/python3 ${SCRIPTS_DIR}/panther.py --instance-id ${INSTANCE_ID} >> ${LOGS_DIR}/cron.log 2>&1"
 echo ""
 if [[ -n "${REAL_USER}" ]]; then
     echo "  All files are owned by: ${REAL_USER}"
