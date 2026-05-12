@@ -28,7 +28,7 @@ set -uo pipefail
 # ---------------------------------------------------------------------------
 REPO_URL="${REPO_URL:-https://github.com/SmurfitWestrock/Panther-3250}"
 BRANCH="${BRANCH:-main}"
-INTEGRATION_SUBDIR="integrations/panther"
+INTEGRATION_SUBDIR="integrations/panther3250"
 DEFAULT_INSTALL_DIR="/opt/VEZA/panther-veza"
 SCRIPTS_DIR=""
 LOGS_DIR=""
