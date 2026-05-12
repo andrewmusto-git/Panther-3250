@@ -291,11 +291,8 @@ class PantherClient:
     """Minimal Panther REST API client using a Bearer access token."""
 
     def __init__(self, base_url: str, access_token: str, tenant: str = "3250") -> None:
-        # Normalise: strip trailing slash, append /v1 when absent
-        base = base_url.rstrip("/")
-        if not base.endswith("/v1"):
-            base = f"{base}/v1"
-        self.base_url = base
+        # Normalise: strip trailing slash; use the URL exactly as provided
+        self.base_url = base_url.rstrip("/")
 
         self.session = requests.Session()
         self.session.headers.update(
