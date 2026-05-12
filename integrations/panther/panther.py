@@ -167,7 +167,14 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--panther-tenant", default=None,
-        help="Tenant ID sent in the 'tenant' request header (overrides PANTHER_TENANT; default: 3250)",
+        help="Tenant ID sent in the 'tenant' request header (overrides PANTHER_TENANT)",
+    )
+    parser.add_argument(
+        "--instance-id", default=None,
+        metavar="XXXX",
+        help="4-digit Panther instance ID (e.g. 3250). Sets provider name to 'Panther-XXXX', "
+             "the install directory to /opt/VEZA/pantherXXXX-veza, and the tenant header "
+             "if not overridden via --panther-tenant or PANTHER_TENANT.",
     )
 
     # Behaviour flags
@@ -611,14 +618,42 @@ def main() -> None:
     args = parse_args()
     _setup_logging(args.log_level)
 
+    # ------------------------------------------------------------------
+    # Instance ID — prompt if not supplied on the CLI
+    # ------------------------------------------------------------------
+    instance_id = args.instance_id
+    if not instance_id:
+        print("\n" + "=" * 60)
+        print("  Panther \u2192 Veza OAA Integration \u2014 Instance Setup")
+        print("=" * 60)
+        while True:
+            instance_id = input(
+                "\n  Enter the 4-digit Panther instance ID\n"
+                "  (sets provider name to 'Panther-XXXX', e.g. 3250): "
+            ).strip()
+            if instance_id.isdigit() and len(instance_id) == 4:
+                break
+            print("  Invalid \u2014 please enter exactly 4 digits (e.g. 3250).")
+
+    DEFAULT_INSTALL_DIR = f"/opt/VEZA/panther{instance_id}-veza"
+    # Override provider_name unless --provider-name was explicitly set
+    if args.provider_name == "Panther":
+        args.provider_name = f"Panther-{instance_id}"
+
     # Startup banner (print() intentional here — visible even when log level is high)
     print("\n" + "=" * 60)
     print("  Panther \u2192 Veza OAA Integration")
-    print(f"  Started : {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    print(f"  Mode    : {'DRY RUN (no Veza push)' if args.dry_run else 'LIVE PUSH'}")
+    print(f"  Started     : {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    print(f"  Instance    : {instance_id}")
+    print(f"  Provider    : {args.provider_name}")
+    print(f"  Install dir : {DEFAULT_INSTALL_DIR}")
+    print(f"  Mode        : {'DRY RUN (no Veza push)' if args.dry_run else 'LIVE PUSH'}")
     print("=" * 60)
 
     cfg = load_config(args)
+    # Use instance_id as the tenant unless explicitly overridden via CLI or env var
+    if not args.panther_tenant and not os.getenv("PANTHER_TENANT"):
+        cfg["panther_tenant"] = instance_id
     validate_config(cfg, dry_run=args.dry_run)
 
     # -------------------------------------------------------------------
