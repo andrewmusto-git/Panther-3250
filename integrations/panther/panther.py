@@ -473,8 +473,7 @@ def build_oaa_payload(
             log.warning("Skipping group with missing groupName: %s", group)
             continue
 
-        local_role = app.add_local_role(group_name, unique_id=group_name)
-        local_role.add_permission("Member", apply_to_application=True)
+        local_role = app.add_local_role(group_name, unique_id=group_name, permissions=["Member"])
         group_name_set.add(group_name)
         log.debug("Added group as role: %s", group_name)
 
@@ -499,7 +498,7 @@ def build_oaa_payload(
             if not gname:
                 continue
             if gname in group_name_set:
-                local_user.add_role(gname)
+                local_user.add_role(gname, apply_to_application=True)
                 log.debug("User %s → group %s", user_name, gname)
             else:
                 unmatched_groups.add(gname)
