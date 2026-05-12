@@ -28,8 +28,8 @@ set -uo pipefail
 # ---------------------------------------------------------------------------
 REPO_URL="${REPO_URL:-https://github.com/andrewmusto-git/Panther-3250}"
 BRANCH="${BRANCH:-main}"
-INTEGRATION_SUBDIR="integrations/panther3250"
-DEFAULT_INSTALL_DIR="/opt/VEZA/panther-veza"
+INTEGRATION_SUBDIR="integrations/panther"
+DEFAULT_INSTALL_DIR="/opt/VEZA/panther3250-veza"
 SCRIPTS_DIR=""
 LOGS_DIR=""
 NON_INTERACTIVE=false
